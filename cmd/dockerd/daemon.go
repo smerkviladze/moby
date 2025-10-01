@@ -758,24 +758,29 @@ func (cli *DaemonCli) getContainerdDaemonOpts() ([]supervisor.DaemonOpt, error) 
 	return opts, nil
 }
 
-func newAPIServerTLSConfig(config *config.Config) (*tls.Config, error) {
+func newAPIServerTLSConfig(cfg *config.Config) (*tls.Config, error) {
 	var tlsConfig *tls.Config
-	if config.TLS != nil && *config.TLS {
+	if cfg.TLS != nil && *cfg.TLS {
 		var (
 			clientAuth tls.ClientAuthType
 			err        error
 		)
-		if config.TLSVerify == nil || *config.TLSVerify {
+		if cfg.TLSVerify == nil || *cfg.TLSVerify {
 			// server requires and verifies client's certificate
 			clientAuth = tls.RequireAndVerifyClientCert
 		}
 		tlsConfig, err = tlsconfig.Server(tlsconfig.Options{
-			CAFile:             config.TLSOptions.CAFile,
-			CertFile:           config.TLSOptions.CertFile,
-			KeyFile:            config.TLSOptions.KeyFile,
+			CAFile:             cfg.TLSOptions.CAFile,
+			CertFile:           cfg.TLSOptions.CertFile,
+			KeyFile:            cfg.TLSOptions.KeyFile,
 			ExclusiveRootPools: true,
 			ClientAuth:         clientAuth,
 		})
+		if len(cfg.TLSCipherSuites) > 0 {
+			tlsConfig.CipherSuites = cfg.TLSCipherSuites
+		} else {
+			tlsConfig.CipherSuites = config.DefaultServerAcceptedCiphers
+		}
 		if err != nil {
 			return nil, errors.Wrap(err, "invalid TLS configuration")
 		}

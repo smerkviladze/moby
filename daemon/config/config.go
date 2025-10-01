@@ -3,6 +3,7 @@ package config // import "github.com/docker/docker/daemon/config"
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -78,6 +79,7 @@ var flatOptions = map[string]bool{
 	"default-ulimits":      true,
 	"features":             true,
 	"builder":              true,
+	"tlsciphers":           true,
 }
 
 // skipValidateOptions contains configuration keys
@@ -88,6 +90,7 @@ var skipValidateOptions = map[string]bool{
 	"builder":  true,
 	// Corresponding flag has been removed because it was already unusable
 	"deprecated-key-path": true,
+	"tlsciphers":          true,
 }
 
 // skipDuplicates contains configuration keys that
@@ -98,6 +101,55 @@ var skipValidateOptions = map[string]bool{
 // during the parsing.
 var skipDuplicates = map[string]bool{
 	"runtimes": true,
+}
+
+// DefaultServerAcceptedCiphers is a list of commonly accepted set of TLS cipher suites,
+// with known weak algorithms removed.
+var DefaultServerAcceptedCiphers = []uint16{
+	tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+}
+
+// CipherSuites is a custom type that allows parsing TLS cipher suite names from JSON.
+type CipherSuites []uint16
+
+// Map of supported cipher suite names to their constants.
+var cipherNameToID = map[string]uint16{
+	"TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384": tls.TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+	"TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384":   tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+	"TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256": tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+	"TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256":   tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+	"TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA":    tls.TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+	"TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA":    tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+	"TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA":      tls.TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+	"TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA":      tls.TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+}
+
+func (cs *CipherSuites) UnmarshalJSON(data []byte) error {
+	var names []string
+	if err := json.Unmarshal(data, &names); err != nil {
+		return fmt.Errorf("invalid TLS cipher list: %w", err)
+	}
+
+	// If empty, fall back to secure defaults
+	if len(names) == 0 {
+		*cs = DefaultServerAcceptedCiphers
+		return nil
+	}
+
+	var parsed []uint16
+	for _, name := range names {
+		if id, ok := cipherNameToID[name]; ok {
+			parsed = append(parsed, id)
+		} else {
+			return fmt.Errorf("unknown TLS cipher: %s", name)
+		}
+	}
+
+	*cs = parsed
+	return nil
 }
 
 // LogConfig represents the default log configuration.
@@ -195,6 +247,13 @@ type CommonConfig struct {
 	// Embedded structs that allow config
 	// deserialization without the full struct.
 	TLSOptions
+
+	// TlsCipherSuites is a list of commonly accepted set of TLS cipher suites,
+	// with known weak algorithms removed.
+	// TLSCipherSuites []uint16 `json:"tlsciphers,omitempty"`
+
+	// TLSCipherSuites is a list of TLS cipher suites (human-readable names) parsed into []uint16.
+	TLSCipherSuites CipherSuites `json:"tlsciphers,omitempty"`
 
 	// SwarmDefaultAdvertiseAddr is the default host/IP or network interface
 	// to use if a wildcard address is specified in the ListenAddr value
@@ -307,6 +366,7 @@ func New() (*Config, error) {
 			ContainerdPluginNamespace: DefaultPluginNamespace,
 			DefaultRuntime:            StockRuntimeName,
 			MinAPIVersion:             defaultMinAPIVersion,
+			TLSCipherSuites:           DefaultServerAcceptedCiphers,
 		},
 	}
 
