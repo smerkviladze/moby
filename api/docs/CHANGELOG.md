@@ -13,6 +13,13 @@ keywords: "API, Docker, rcli, REST, documentation"
      will be rejected.
 -->
 
+## v1.55 API changes
+
+* `GET /images/{name}` and `GET /images/json` now include a `Statements` field
+  in each attestation manifest summary (`Manifests[].AttestationData.Statements`)
+  when manifests are requested. Each element is a verbatim in-toto Statement
+  JSON object read from the attestation manifest layers.
+
 ## v1.54 API changes
 
 * `GET /images/json` now supports an `identity` query parameter. When set,

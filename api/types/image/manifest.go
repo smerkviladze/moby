@@ -1,6 +1,8 @@
 package image
 
 import (
+	"encoding/json"
+
 	"github.com/opencontainers/go-digest"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -101,4 +103,10 @@ type ImageProperties struct {
 type AttestationProperties struct {
 	// For is the digest of the image manifest that this attestation is for.
 	For digest.Digest `json:"For"`
+
+	// Statements contains the verbatim in-toto statement blobs attached to
+	// this attestation manifest, in the order they appear in the manifest
+	// layers. Each element is a complete in-toto Statement JSON object.
+	// Only populated when manifests are requested.
+	Statements []json.RawMessage `json:"Statements,omitempty"`
 }

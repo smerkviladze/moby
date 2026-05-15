@@ -325,7 +325,21 @@ func (i *ImageService) multiPlatformSummary(ctx context.Context, img c8dimages.I
 					}
 
 					mfstSummary.Kind = imagetypes.ManifestKindAttestation
-					mfstSummary.AttestationData = &imagetypes.AttestationProperties{For: dgst}
+					attData := &imagetypes.AttestationProperties{For: dgst}
+					if mfst, err := img.Manifest(ctx); err == nil {
+						for _, layer := range mfst.Layers {
+							if layer.Annotations["in-toto.io/predicate-type"] == "" {
+								continue
+							}
+							data, err := content.ReadBlob(ctx, i.content, layer)
+							if err != nil {
+								logger.WithError(err).Debug("failed to read attestation statement blob")
+								continue
+							}
+							attData.Statements = append(attData.Statements, json.RawMessage(data))
+						}
+					}
+					mfstSummary.AttestationData = attData
 				}
 			}
 
